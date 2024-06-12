@@ -1,3 +1,11 @@
+out/
+*.iml
+.idea/
+.DS_Store
+.class
+Thumbs.db
+lib/
+
 # Compiled class file
 *.class
 
