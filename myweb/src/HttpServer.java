@@ -1,6 +1,7 @@
 package serveur;
 
 import java.io.IOException;
+import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
@@ -21,9 +22,11 @@ public class HttpServer {
             while (true) {
                 try {
                     Socket clientSocket = serverSocket.accept();
-                    Handler handler = new Handler(clientSocket, config.getRootDir());
+                    System.out.println("Client connecté depuis l'ip : " + clientSocket.getInetAddress().getHostAddress());
+
+                    Handler handler = new Handler(clientSocket, config);
                     new Thread(handler).start();
-                } catch (IOException e) {
+                } catch (Exception e) {
                     e.printStackTrace();
                 }
             }

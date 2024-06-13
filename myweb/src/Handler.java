@@ -1,22 +1,33 @@
 package serveur;
 
 import java.io.*;
+import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.file.Files;
 
 public class Handler implements Runnable {
-    private Socket clientSocket;
-    private String rootDir;
+    private final Socket clientSocket;
+    private final Configuration config;
 
-    public Handler(Socket clientSocket, String rootDir) {
+    public Handler(Socket clientSocket, Configuration config) {
         this.clientSocket = clientSocket;
-        this.rootDir = rootDir;
+        this.config = config;
     }
 
     @Override
     public void run() {
-        try (BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-             OutputStream out = clientSocket.getOutputStream()) {
+        try {
+            InetAddress clientAddress = clientSocket.getInetAddress();
+            String clientIP = clientAddress.getHostAddress();
+
+            if (!checkip(clientIP)) {
+                sendError(clientSocket.getOutputStream(), 403, "Forbidden: Access is denied");
+                clientSocket.close();
+                return;
+            }
+
+            BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            OutputStream out = clientSocket.getOutputStream();
 
             String ligne = in.readLine();
             String[] lignecoupe = ligne.split(" ");
@@ -37,9 +48,9 @@ public class Handler implements Runnable {
 
             page = page.substring(1);
 
-            File file = new File(rootDir + "/" + page);
+            File file = new File(config.getRootDir() + "/" + page);
             if (!file.exists()) {
-                sendError(out, 404, "Le fichier n'existe pas");
+                sendError(out, 404, "Not Found");
                 return;
             }
 
@@ -65,9 +76,23 @@ public class Handler implements Runnable {
             out.flush();
 
             System.out.println("Réponse envoyée.");
-        } catch (IOException e) {
+        }
+        catch (Exception e) {
             e.printStackTrace();
         }
+    }
+    private boolean checkip(String clientIP) {
+        for (String rejectedIP : config.getReject()) {
+            if (clientIP.startsWith(rejectedIP)) {
+                return false;
+            }
+        }
+        for (String acceptedIP : config.getAccept()) {
+            if (clientIP.startsWith(acceptedIP)) {
+                return true;
+            }
+        }
+        return config.getAccept().isEmpty();
     }
 
     private void sendError(OutputStream out, int code, String message) throws IOException {
