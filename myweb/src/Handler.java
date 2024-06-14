@@ -48,6 +48,11 @@ public class Handler implements Runnable {
                 page = "/index.html";
             }
 
+            if (methode.equals("GET") && page.equals("/status")) {
+                Status.sendStatus(out,config);
+                return;
+            }
+
             System.out.println("Requete de type " + methode + " reçu\nPour acceder à la page " + page + "\nEn version " + version);
 
             page = page.substring(1);
