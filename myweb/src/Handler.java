@@ -65,49 +65,51 @@ public class Handler implements Runnable {
             byte[] contenu = Files.readAllBytes(file.toPath());
 
             String typeContenu;
-            boolean isBase64 = false;
             if (page.endsWith(".html")) {
                 typeContenu = "text/html";
             } else if (page.endsWith(".jpg") || page.endsWith(".jpeg")) {
-                typeContenu = "image/jpeg";
-                isBase64 = true;
+                String version64 = Base64.getEncoder().encodeToString(contenu);
+                String pagehtml = "<img src=\"data:image/jpeg;base64," + version64 + "\">";
+                contenu = pagehtml.getBytes();
+                typeContenu = "text/html";
             } else if (page.endsWith(".gif")) {
-                typeContenu = "image/gif";
-                isBase64 = true;
+                String version64 = Base64.getEncoder().encodeToString(contenu);
+                String pagehtml = "<img src=\"data:image/gif;base64," + version64 + "\">";
+                contenu = pagehtml.getBytes();
+                typeContenu = "text/html";
             } else if (page.endsWith(".png")) {
-                typeContenu = "image/png";
-                isBase64 = true;
+                String version64 = Base64.getEncoder().encodeToString(contenu);
+                String pagehtml = "<img src=\"data:image/png;base64," + version64 + "\">";
+                contenu = pagehtml.getBytes();
+                typeContenu = "text/html";
             } else if (page.endsWith(".mp3")) {
-                typeContenu = "audio/mpeg";
-                isBase64 = true;
+                String version64 = Base64.getEncoder().encodeToString(contenu);
+                String pagehtml = "<audio controls><source type=\"audio/mpeg\" src=\"data:audio/mpeg;base64," + version64 + "\"></audio>";
+                contenu = pagehtml.getBytes();
+                typeContenu = "text/html";
             } else if (page.endsWith(".wav")) {
-                typeContenu = "audio/wav";
-                isBase64 = true;
+                String version64 = Base64.getEncoder().encodeToString(contenu);
+                String pagehtml = "<audio controls><source type=\"audio/wav\" src=\"data:audio/wav;base64," + version64 + "\"></audio>";
+                contenu = pagehtml.getBytes();
+                typeContenu = "text/html";
             } else if (page.endsWith(".mp4")) {
-                typeContenu = "video/mp4";
-                isBase64 = true;
+                String version64 = Base64.getEncoder().encodeToString(contenu);
+                String pagehtml = "<video controls><source type=\"video/mp4\" src=\"data:video/mp4;base64," + version64 + "\"></video>";
+                contenu = pagehtml.getBytes();
+                typeContenu = "text/html";
             } else {
-                sendError(out, 400, "Unsupported Media Type");
+                sendError(out, 415, "Unsupported Media Type");
                 return;
             }
 
-            if (isBase64) {
-                String encoded = Base64.getEncoder().encodeToString(contenu);
-                out.write(("HTTP/1.1 200 OK\r\n").getBytes());
-                out.write(("Content-Type: " + typeContenu + "\r\n").getBytes());
-                out.write(("Content-Transfer-Encoding: base64\r\n").getBytes());
-                out.write(("Content-Length: " + encoded.length() + "\r\n").getBytes());
-                out.write(("\r\n").getBytes());
-                out.write(encoded.getBytes());
-                out.flush();
-            } else {
-                out.write(("HTTP/1.1 200 OK\r\n").getBytes());
-                out.write(("Content-Type: " + typeContenu + "\r\n").getBytes());
-                out.write(("Content-Length: " + contenu.length + "\r\n").getBytes());
-                out.write(("\r\n").getBytes());
-                out.write(contenu);
-                out.flush();
-            }
+
+            out.write(("HTTP/1.1 200 OK\r\n").getBytes());
+            out.write(("Content-Type: " + typeContenu + "\r\n").getBytes());
+            out.write(("Content-Length: " + contenu.length + "\r\n").getBytes());
+            out.write(("\r\n").getBytes());
+            out.write(contenu);
+            out.flush();
+
 
             System.out.println("Réponse envoyée.");
         } catch (IOException e) {
