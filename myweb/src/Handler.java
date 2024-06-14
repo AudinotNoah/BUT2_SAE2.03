@@ -8,10 +8,12 @@ import java.nio.file.Files;
 public class Handler implements Runnable {
     private final Socket clientSocket;
     private final Configuration config;
+    private final Logger logger;
 
-    public Handler(Socket clientSocket, Configuration config) {
+    public Handler(Socket clientSocket, Configuration config, Logger logger) {
         this.clientSocket = clientSocket;
         this.config = config;
+        this.logger = logger;
     }
 
     @Override
@@ -23,6 +25,7 @@ public class Handler implements Runnable {
             if (!checkip(clientIP)) {
                 sendError(clientSocket.getOutputStream(), 403, "Forbidden: Access is denied");
                 clientSocket.close();
+                logger.logAccess("Requête refusée de " + clientIP);
                 return;
             }
 
@@ -33,6 +36,7 @@ public class Handler implements Runnable {
             String[] lignecoupe = ligne.split(" ");
             if (lignecoupe.length < 3) {
                 sendError(out, 400, "Erreur requete");
+                logger.logError("Requête mal formée de " + clientIP);
                 return;
             }
 
@@ -51,6 +55,7 @@ public class Handler implements Runnable {
             File file = new File(config.getRootDir() + "/" + page);
             if (!file.exists()) {
                 sendError(out, 404, "Not Found");
+                logger.logError("Fichier non trouvé pour la requête de " + clientIP + " : " + page);
                 return;
             }
 
@@ -65,6 +70,7 @@ public class Handler implements Runnable {
                 typecontenue = "image/gif";
             } else {
                 sendError(out, 400, "Fichier d'un type inconnu");
+                logger.logError("Type de fichier inconnu pour la requête de " + clientIP + " : " + page);
                 return;
             }
 
@@ -76,11 +82,13 @@ public class Handler implements Runnable {
             out.flush();
 
             System.out.println("Réponse envoyée.");
-        }
-        catch (Exception e) {
+            logger.logAccess("Requête " + methode + " pour " + page + " de " + clientIP + " avec succès.");
+        } catch (Exception e) {
             e.printStackTrace();
+            logger.logError("Erreur lors de la gestion de la requête : " + e.getMessage());
         }
     }
+
     private boolean checkip(String clientIP) {
         for (String rejectedIP : config.getReject()) {
             if (clientIP.startsWith(rejectedIP)) {

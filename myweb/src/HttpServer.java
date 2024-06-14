@@ -8,9 +8,11 @@ import java.util.ArrayList;
 
 public class HttpServer {
     private final Configuration config;
+    private final Logger logger;
 
     public HttpServer() {
         config = new Configuration();
+        logger = new Logger(config.getAccessLogPath(), config.getErrorLogPath());
         System.out.println(config.toString());
     }
 
@@ -24,14 +26,16 @@ public class HttpServer {
                     Socket clientSocket = serverSocket.accept();
                     System.out.println("Client connecté depuis l'ip : " + clientSocket.getInetAddress().getHostAddress());
 
-                    Handler handler = new Handler(clientSocket, config);
+                    Handler handler = new Handler(clientSocket, config, logger);
                     new Thread(handler).start();
                 } catch (Exception e) {
                     e.printStackTrace();
+                    logger.logError("Erreur lors de la gestion de la connexion : " + e.getMessage());
                 }
             }
         } catch (IOException e) {
             e.printStackTrace();
+            logger.logError("Erreur lors du démarrage du serveur : " + e.getMessage());
         }
     }
 }

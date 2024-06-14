@@ -13,8 +13,10 @@ import java.util.ArrayList;
 public class Configuration {
     private int port = 80;
     private String rootDir = "site";
-    private final ArrayList<String> accept = new ArrayList<String>();
-    private final ArrayList<String> reject = new ArrayList<String>();
+    private String accessLogPath = "access.log"; // Valeur par défaut
+    private String errorLogPath = "error.log"; // Valeur par défaut
+    private final ArrayList<String> accept = new ArrayList<>();
+    private final ArrayList<String> reject = new ArrayList<>();
 
     public Configuration() {
         lireConfiguration();
@@ -23,10 +25,9 @@ public class Configuration {
     private void lireConfiguration() {
         try {
             File configFile;
-            if (System.getProperty("os.name").toLowerCase().contains("win") ){ // pour nos tests sur windows
+            if (System.getProperty("os.name").toLowerCase().contains("win")) { // pour nos tests sur windows
                 configFile = new File("./etc/myweb/myweb.conf");
-            }
-            else{
+            } else {
                 configFile = new File("/etc/myweb/myweb.conf");
             }
             DocumentBuilderFactory dbFactory = DocumentBuilderFactory.newInstance();
@@ -60,6 +61,12 @@ public class Configuration {
                                     reject.add(s.trim());
                             }
                             break;
+                        case "accesslog":
+                            accessLogPath = contenu.trim();
+                            break;
+                        case "errorlog":
+                            errorLogPath = contenu.trim();
+                            break;
                         default:
                             System.out.println("Element inconnu " + tag + ": " + contenu);
                     }
@@ -83,17 +90,28 @@ public class Configuration {
     public ArrayList<String> getAccept() {
         return accept;
     }
+
     public ArrayList<String> getReject() {
         return reject;
     }
 
-    public String toString(){
-        StringBuilder sb  = new StringBuilder();
+    public String getAccessLogPath() {
+        return accessLogPath;
+    }
+
+    public String getErrorLogPath() {
+        return errorLogPath;
+    }
+
+    public String toString() {
+        StringBuilder sb = new StringBuilder();
         sb.append("Configuration actuelle : ");
         sb.append("\n   port=").append(port);
         sb.append("\n   rootDir=").append(rootDir);
         sb.append("\n   accept=").append(accept);
         sb.append("\n   reject=").append(reject);
+        sb.append("\n   accessLogPath=").append(accessLogPath);
+        sb.append("\n   errorLogPath=").append(errorLogPath);
         return sb.toString();
     }
 }
