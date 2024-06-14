@@ -13,6 +13,13 @@ import java.util.Base64;
 import org.w3c.dom.*;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.ByteArrayInputStream;
 
 public class Handler implements Runnable {
     private final Socket clientSocket;
@@ -146,27 +153,86 @@ public class Handler implements Runnable {
 
     private byte[] gererHTML(byte[] contenu)  {
         try {
+            String s_contenue = new String(contenu);
+            s_contenue =  s_contenue.replaceAll("«", "\"").replaceAll("»", "\"");
+            contenu = s_contenue.getBytes();
+            // Créer un constructeur de documents
             DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
             DocumentBuilder builder = factory.newDocumentBuilder();
-            Document doc = builder.parse(new InputSource(new StringReader(new String(contenu))));
-            NodeList codeNodes = doc.getElementsByTagName("code");
-            System.out.println(codeNodes);
-            for (int i = 0; i < codeNodes.getLength(); i++) {
-                Element codeElement = (Element) codeNodes.item(i);
-                String interpreter = codeElement.getAttribute("interpreteur");
-                String codeContent = codeElement.getTextContent().trim();
 
-                System.out.println(interpreter);
-                System.out.println(codeContent);
+            // Parser le HTML
+            Document doc = builder.parse(new ByteArrayInputStream(contenu));
+
+            // Sélectionner toutes les balises <code>
+            NodeList codeTags = doc.getElementsByTagName("code");
+
+            // Parcourir chaque balise <code>
+            for (int i = 0; i < codeTags.getLength(); i++) {
+                Element codeTag = (Element) codeTags.item(i);
+
+                // Obtenir l'attribut interpreteur
+                String interpreteur = codeTag.getAttribute("interpreteur");
+
+                // Obtenir le contenu de la balise <code>
+                String code = codeTag.getTextContent().trim();
+
+                // Afficher l'interpreteur et le code
+                System.out.println("Interpreteur: " + interpreteur);
+                System.out.println("Code:");
+                System.out.println(code);
+                System.out.println("--------------------");
+                System.out.println(lancercode(interpreteur,code));
             }
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
         return contenu;
     }
 
-    private String executeCode(String interpreteur, String code) {
-        return "yep";
+    private String lancercode(String interpreteur, String code) {
+        StringBuilder output = new StringBuilder();
+
+        try {
+            ProcessBuilder processBuilder = new ProcessBuilder();
+
+            if (interpreteur.equals("/bin/bash")) {
+                // Exécution de code bash
+                processBuilder.command("bash", "-c", code);
+
+            } else if (interpreteur.equals("/usr/bin/python")) {
+                // Exécution de code Python
+                processBuilder.command("python", "-c", code);
+
+            } else {
+                // Gérer d'autres interpréteurs si nécessaire
+                System.out.println("Interpreteur non pris en charge: " + interpreteur);
+                return "";
+            }
+
+            // Définir le répertoire de travail du processus (facultatif, dépend de votre besoin)
+            // Par exemple, définir le répertoire du script à exécuter
+            if (!System.getProperty("os.name").toLowerCase().contains("win")) { // pour nos tests sur windows
+                processBuilder.directory(new File(interpreteur));
+            }
+
+
+            // Démarrer le processus et récupérer la sortie
+            Process process = processBuilder.start();
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append("\n");
+            }
+
+            // Attendre la fin de l'exécution du processus
+            int exitCode = process.waitFor();
+            System.out.println("Exit code: " + exitCode);
+
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        return output.toString();
     }
+
 }
