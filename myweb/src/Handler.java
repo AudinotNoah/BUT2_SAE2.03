@@ -1,16 +1,17 @@
 package serveur;
-
 import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.file.Files;
+import java.util.Base64;
 
 public class Handler implements Runnable {
     private final Socket clientSocket;
     private final Configuration config;
+
     private final Logger logger;
 
-    public Handler(Socket clientSocket, Configuration config, Logger logger) {
+    public Handler(Socket clientSocket, Configuration config,Logger logger) {
         this.clientSocket = clientSocket;
         this.config = config;
         this.logger = logger;
@@ -18,33 +19,34 @@ public class Handler implements Runnable {
 
     @Override
     public void run() {
-        BufferedReader in = null;
-        OutputStream out = null;
-
         try {
             InetAddress clientAddress = clientSocket.getInetAddress();
             String clientIP = clientAddress.getHostAddress();
 
-            if (!checkip(clientIP)) {
+            if (!checkIP(clientIP)) {
                 sendError(clientSocket.getOutputStream(), 403, "Forbidden: Access is denied");
-                logger.logAccess("Requête refusée de " + clientIP);
+                clientSocket.close();
                 return;
             }
 
-            in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-            out = clientSocket.getOutputStream();
+            BufferedReader in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            OutputStream out = clientSocket.getOutputStream();
 
             String ligne = in.readLine();
-            String[] lignecoupe = ligne.split(" ");
-            if (lignecoupe.length < 3) {
-                sendError(out, 400, "Erreur requete");
-                logger.logError("Requête mal formée de " + clientIP);
+            String[] ligneCoupe = ligne.split(" ");
+            if (ligneCoupe.length < 3) {
+                sendError(out, 400, "Bad Request");
                 return;
             }
 
-            String methode = lignecoupe[0];
-            String page = lignecoupe[1];
-            String version = lignecoupe[2];
+            String methode = ligneCoupe[0];
+            String page = ligneCoupe[1];
+            String version = ligneCoupe[2];
+
+            if (methode.equals("GET") && page.equals("/status")) {
+                sendStatus(out);
+                return;
+            }
 
             if (page.equals("/")) {
                 page = "/index.html";
@@ -55,114 +57,73 @@ public class Handler implements Runnable {
             page = page.substring(1);
 
             File file = new File(config.getRootDir() + "/" + page);
-            if (!file.exists() || !file.isFile()) {
+            if (!file.exists()) {
                 sendError(out, 404, "Not Found");
-                logger.logError("Fichier non trouvé pour la requête de " + clientIP + " : " + page);
                 return;
             }
 
-            byte[] content = Files.readAllBytes(file.toPath());
+            byte[] contenu = Files.readAllBytes(file.toPath());
 
-            // Convertir le contenu en chaîne de caractères UTF-8
-            String contentStr = new String(content, "UTF-8");
+            String typeContenu;
+            boolean isBase64 = false;
+            if (page.endsWith(".html")) {
+                typeContenu = "text/html";
+            } else if (page.endsWith(".jpg") || page.endsWith(".jpeg")) {
+                typeContenu = "image/jpeg";
+                isBase64 = true;
+            } else if (page.endsWith(".gif")) {
+                typeContenu = "image/gif";
+                isBase64 = true;
+            } else if (page.endsWith(".png")) {
+                typeContenu = "image/png";
+                isBase64 = true;
+            } else if (page.endsWith(".mp3")) {
+                typeContenu = "audio/mpeg";
+                isBase64 = true;
+            } else if (page.endsWith(".wav")) {
+                typeContenu = "audio/wav";
+                isBase64 = true;
+            } else if (page.endsWith(".mp4")) {
+                typeContenu = "video/mp4";
+                isBase64 = true;
+            } else {
+                sendError(out, 400, "Unsupported Media Type");
+                return;
+            }
 
-            // Traiter les balises <code> avec attribut interpreteur
-            contentStr = processInterpreteurTags(contentStr);
+            if (isBase64) {
+                String encoded = Base64.getEncoder().encodeToString(contenu);
+                out.write(("HTTP/1.1 200 OK\r\n").getBytes());
+                out.write(("Content-Type: " + typeContenu + "\r\n").getBytes());
+                out.write(("Content-Transfer-Encoding: base64\r\n").getBytes());
+                out.write(("Content-Length: " + encoded.length() + "\r\n").getBytes());
+                out.write(("\r\n").getBytes());
+                out.write(encoded.getBytes());
+                out.flush();
+            } else {
+                out.write(("HTTP/1.1 200 OK\r\n").getBytes());
+                out.write(("Content-Type: " + typeContenu + "\r\n").getBytes());
+                out.write(("Content-Length: " + contenu.length + "\r\n").getBytes());
+                out.write(("\r\n").getBytes());
+                out.write(contenu);
+                out.flush();
+            }
 
-            // Envoyer la réponse HTTP
-            sendHttpResponse(out, 200, contentStr);
-
-            logger.logAccess("Requête " + methode + " pour " + page + " de " + clientIP + " avec succès.");
+            System.out.println("Réponse envoyée.");
         } catch (IOException e) {
             e.printStackTrace();
-            logger.logError("Erreur lors de la gestion de la requête : " + e.getMessage());
         } finally {
             try {
-                if (in != null) in.close();
-                if (out != null) out.close();
-                clientSocket.close();
+                if (clientSocket != null && !clientSocket.isClosed()) {
+                    clientSocket.close();
+                }
             } catch (IOException e) {
                 e.printStackTrace();
             }
         }
     }
 
-    private String executeCode(String interpreteur, String code) {
-        StringBuilder output = new StringBuilder();
-        try {
-            ProcessBuilder builder = new ProcessBuilder(interpreteur);
-            builder.redirectErrorStream(true);
-            Process process = builder.start();
-
-            BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
-            writer.write(code);
-            writer.newLine();
-            writer.flush();
-            writer.close();
-
-            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
-            }
-            reader.close();
-
-            int exitCode = process.waitFor();
-            if (exitCode != 0) {
-                output.append("Erreur lors de l'exécution du code : Exit code ").append(exitCode);
-            }
-        } catch (IOException | InterruptedException e) {
-            output.append("Erreur lors de l'exécution du code : ").append(e.getMessage());
-        }
-        return output.toString();
-    }
-
-    private String processInterpreteurTags(String content) {
-        StringBuilder processedContent = new StringBuilder();
-        int currentIndex = 0;
-
-        while (currentIndex < content.length()) {
-            int startIndex = content.indexOf("<code interpreteur=\"", currentIndex);
-            if (startIndex == -1) {
-                // Aucune balise <code> avec attribut interpreteur trouvée
-                processedContent.append(content.substring(currentIndex));
-                break;
-            }
-
-            int endIndex = content.indexOf("</code>", startIndex);
-            if (endIndex == -1) {
-                // Balise de fin </code> manquante, traiter jusqu'à la fin du contenu
-                processedContent.append(content.substring(currentIndex));
-                break;
-            }
-
-            // Ajouter le contenu avant la balise <code>
-            processedContent.append(content, currentIndex, startIndex);
-
-            // Extraire l'attribut interpreteur
-            int interpreteurStartIndex = startIndex + "<code interpreteur=\"".length();
-            int interpreteurEndIndex = content.indexOf("\"", interpreteurStartIndex);
-            if (interpreteurEndIndex == -1) {
-                // Attribut interpreteur mal formé, sauter cette balise
-                processedContent.append(content, startIndex, endIndex + "</code>".length());
-            } else {
-                String interpreteur = content.substring(interpreteurStartIndex, interpreteurEndIndex);
-                String codeToExecute = content.substring(endIndex + "</code>".length(), endIndex); // Récupérer le contenu entre les balises
-
-                // Exécuter le code selon l'interpreteur spécifié
-                String result = executeCode(interpreteur, codeToExecute.trim());
-
-                // Remplacer la balise <code> par le résultat de l'exécution
-                processedContent.append(result);
-            }
-
-            currentIndex = endIndex + "</code>".length();
-        }
-
-        return processedContent.toString();
-    }
-
-    private boolean checkip(String clientIP) {
+    private boolean checkIP(String clientIP) {
         for (String rejectedIP : config.getReject()) {
             if (clientIP.startsWith(rejectedIP)) {
                 return false;
@@ -182,14 +143,29 @@ public class Handler implements Runnable {
         out.flush();
     }
 
-    private void sendHttpResponse(OutputStream out, int statusCode, String content) throws IOException {
-        String response = "HTTP/1.1 " + statusCode + " OK\r\n"
-                + "Content-Type: text/html\r\n"
-                + "Content-Length: " + content.getBytes("UTF-8").length + "\r\n"
-                + "\r\n"
-                + content;
-        out.write(response.getBytes("UTF-8"));
+    private void sendStatus(OutputStream out) throws IOException {
+        Runtime runtime = Runtime.getRuntime();
+        long freeMemory = runtime.freeMemory();
+        long totalMemory = runtime.totalMemory();
+        long usedMemory = totalMemory - freeMemory;
+
+        File root = new File("/");
+        long freeSpace = root.getFreeSpace();
+        long usableSpace = root.getUsableSpace();
+
+        int processCount = new File("/proc").listFiles().length;
+
+        String status = "Free memory: " + freeMemory + " bytes\n" +
+                "Used memory: " + usedMemory + " bytes\n" +
+                "Free disk space: " + freeSpace + " bytes\n" +
+                "Usable disk space: " + usableSpace + " bytes\n" +
+                "Number of processes: " + processCount;
+
+        out.write(("HTTP/1.1 200 OK\r\n").getBytes());
+        out.write(("Content-Type: text/plain\r\n").getBytes());
+        out.write(("Content-Length: " + status.length() + "\r\n").getBytes());
+        out.write(("\r\n").getBytes());
+        out.write(status.getBytes());
         out.flush();
     }
-
 }
