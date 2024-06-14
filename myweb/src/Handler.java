@@ -1,9 +1,18 @@
 package serveur;
+import org.w3c.dom.Document;
+import org.w3c.dom.NodeList;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.file.Files;
 import java.util.Base64;
+import org.w3c.dom.*;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
 public class Handler implements Runnable {
     private final Socket clientSocket;
@@ -66,6 +75,7 @@ public class Handler implements Runnable {
             byte[] contenu = Files.readAllBytes(file.toPath());
 
             if(page.endsWith(".html")) {
+                contenu = gererHTML(contenu);
                 sendPage(out,contenu);
             }
             else{
@@ -131,5 +141,32 @@ public class Handler implements Runnable {
         out.write(contenu);
         out.flush();
         System.out.println("Réponse envoyée.");
+    }
+
+
+    private byte[] gererHTML(byte[] contenu)  {
+        try {
+            DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder builder = factory.newDocumentBuilder();
+            Document doc = builder.parse(new InputSource(new StringReader(new String(contenu))));
+            NodeList codeNodes = doc.getElementsByTagName("code");
+            System.out.println(codeNodes);
+            for (int i = 0; i < codeNodes.getLength(); i++) {
+                Element codeElement = (Element) codeNodes.item(i);
+                String interpreter = codeElement.getAttribute("interpreteur");
+                String codeContent = codeElement.getTextContent().trim();
+
+                System.out.println(interpreter);
+                System.out.println(codeContent);
+            }
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+        }
+        return contenu;
+    }
+
+    private String executeCode(String interpreteur, String code) {
+        return "yep";
     }
 }
