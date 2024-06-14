@@ -34,6 +34,7 @@ public class Handler implements Runnable {
 
             String ligne = in.readLine();
             String[] ligneCoupe = ligne.split(" ");
+
             if (ligneCoupe.length < 3) {
                 sendError(out, 400, "Bad Request");
                 return;
@@ -44,7 +45,7 @@ public class Handler implements Runnable {
             String version = ligneCoupe[2];
 
             if (methode.equals("GET") && page.equals("/status")) {
-                sendStatus(out);
+                sendPage(out,Status.sendStatus(config));
                 return;
             }
 
@@ -52,7 +53,7 @@ public class Handler implements Runnable {
                 page = "/index.html";
             }
 
-            System.out.println("Requete de type " + methode + " reçu\nPour acceder à la page " + page + "\nEn version " + version);
+            System.out.println("Requete de type " + methode + " reçu\nPour acceder à la page " + page + " en version " + version);
 
             page = page.substring(1);
 
@@ -64,54 +65,31 @@ public class Handler implements Runnable {
 
             byte[] contenu = Files.readAllBytes(file.toPath());
 
-            String typeContenu;
-            if (page.endsWith(".html")) {
-                typeContenu = "text/html";
-            } else if (page.endsWith(".jpg") || page.endsWith(".jpeg")) {
-                String version64 = Base64.getEncoder().encodeToString(contenu);
-                String pagehtml = "<img src=\"data:image/jpeg;base64," + version64 + "\">";
-                contenu = pagehtml.getBytes();
-                typeContenu = "text/html";
-            } else if (page.endsWith(".gif")) {
-                String version64 = Base64.getEncoder().encodeToString(contenu);
-                String pagehtml = "<img src=\"data:image/gif;base64," + version64 + "\">";
-                contenu = pagehtml.getBytes();
-                typeContenu = "text/html";
-            } else if (page.endsWith(".png")) {
-                String version64 = Base64.getEncoder().encodeToString(contenu);
-                String pagehtml = "<img src=\"data:image/png;base64," + version64 + "\">";
-                contenu = pagehtml.getBytes();
-                typeContenu = "text/html";
-            } else if (page.endsWith(".mp3")) {
-                String version64 = Base64.getEncoder().encodeToString(contenu);
-                String pagehtml = "<audio controls><source type=\"audio/mpeg\" src=\"data:audio/mpeg;base64," + version64 + "\"></audio>";
-                contenu = pagehtml.getBytes();
-                typeContenu = "text/html";
-            } else if (page.endsWith(".wav")) {
-                String version64 = Base64.getEncoder().encodeToString(contenu);
-                String pagehtml = "<audio controls><source type=\"audio/wav\" src=\"data:audio/wav;base64," + version64 + "\"></audio>";
-                contenu = pagehtml.getBytes();
-                typeContenu = "text/html";
-            } else if (page.endsWith(".mp4")) {
-                String version64 = Base64.getEncoder().encodeToString(contenu);
-                String pagehtml = "<video controls><source type=\"video/mp4\" src=\"data:video/mp4;base64," + version64 + "\"></video>";
-                contenu = pagehtml.getBytes();
-                typeContenu = "text/html";
-            } else {
-                sendError(out, 415, "Unsupported Media Type");
-                return;
+            if(page.endsWith(".html")) {
+                sendPage(out,contenu);
             }
-
-
-            out.write(("HTTP/1.1 200 OK\r\n").getBytes());
-            out.write(("Content-Type: " + typeContenu + "\r\n").getBytes());
-            out.write(("Content-Length: " + contenu.length + "\r\n").getBytes());
-            out.write(("\r\n").getBytes());
-            out.write(contenu);
-            out.flush();
-
-
-            System.out.println("Réponse envoyée.");
+            else{
+                String pagehtml = "";
+                String version64 = Base64.getEncoder().encodeToString(contenu);
+                if (page.endsWith(".jpg") || page.endsWith(".jpeg")){
+                    pagehtml = "<img src=\"data:image/jpeg;base64," + version64 + "\">";
+                }  else if (page.endsWith(".gif")) {
+                    pagehtml = "<img src=\"data:image/gif;base64," + version64 + "\">";
+                } else if (page.endsWith(".png")) {
+                    pagehtml = "<img src=\"data:image/png;base64," + version64 + "\">";
+                } else if (page.endsWith(".mp3")) {
+                    pagehtml = "<audio controls><source type=\"audio/mpeg\" src=\"data:audio/mpeg;base64," + version64 + "\"></audio>";
+                } else if (page.endsWith(".wav")) {
+                    pagehtml = "<audio controls><source type=\"audio/wav\" src=\"data:audio/wav;base64," + version64 + "\"></audio>";
+                } else if (page.endsWith(".mp4")) {
+                    pagehtml = "<video controls><source type=\"video/mp4\" src=\"data:video/mp4;base64," + version64 + "\"></video>";
+                } else {
+                    sendError(out, 415, "Unsupported Media Type");
+                    return;
+                }
+                contenu = pagehtml.getBytes();
+                sendPage(out,contenu);
+            }
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
@@ -145,29 +123,13 @@ public class Handler implements Runnable {
         out.flush();
     }
 
-    private void sendStatus(OutputStream out) throws IOException {
-        Runtime runtime = Runtime.getRuntime();
-        long freeMemory = runtime.freeMemory();
-        long totalMemory = runtime.totalMemory();
-        long usedMemory = totalMemory - freeMemory;
-
-        File root = new File("/");
-        long freeSpace = root.getFreeSpace();
-        long usableSpace = root.getUsableSpace();
-
-        int processCount = new File("/proc").listFiles().length;
-
-        String status = "Free memory: " + freeMemory + " bytes\n" +
-                "Used memory: " + usedMemory + " bytes\n" +
-                "Free disk space: " + freeSpace + " bytes\n" +
-                "Usable disk space: " + usableSpace + " bytes\n" +
-                "Number of processes: " + processCount;
-
+    private void sendPage(OutputStream out,byte[] contenu ) throws IOException {
         out.write(("HTTP/1.1 200 OK\r\n").getBytes());
-        out.write(("Content-Type: text/plain\r\n").getBytes());
-        out.write(("Content-Length: " + status.length() + "\r\n").getBytes());
+        out.write(("Content-Type: text/html\r\n").getBytes());
+        out.write(("Content-Length: " + contenu.length + "\r\n").getBytes());
         out.write(("\r\n").getBytes());
-        out.write(status.getBytes());
+        out.write(contenu);
         out.flush();
+        System.out.println("Réponse envoyée.");
     }
 }
